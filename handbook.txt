@@ -1,0 +1,15 @@
+1) First thing is the call to cuda_runtime_api.cc::GPGPUSim_Init() (or the GPGPUSim_Context()) via the 
+first CUDA API call. 
+
+2) This calls the function gpgpu_ptx_sim_init_perf() in gpgpusim_entrypoint.cc. 
+There the environmental variables and command line arguments and configuration files 
+are parsed. The global variable g_the_gpu and g_stream_manager are initialized.
+
+3) The init function calls the start_sm_thread() which creates a new thread that
+will run the simulation. The thread rurns the function gpgpu_sim_thread_concurrent()
+which simulates concurrent executrion of multiple kernels 
+(defined via -gpgpu_max_concurrent_kernel)
+
+4) The thread initialized the relevant data structures and then waits for tasks
+from the stream manager. The streamer gets the job from the CUDA API (like kernel 
+launches, cudaMemcpy and cudaStreamCreate()).
