@@ -104,54 +104,56 @@ void print_ptx_file( const char *p, unsigned source_num, const char *filename )
    fflush(stdout);
 }
 
-std::string gpgpu_ptx_sim_convert_ptx_and_sass_to_ptxplus(const std::string ptxfilename, const std::string elffilename, const std::string sassfilename)
+char* gpgpu_ptx_sim_convert_ptx_and_sass_to_ptxplus(const std::string ptxfilename, const std::string elffilename, const std::string sassfilename)
 {
 
-	printf("GPGPU-Sim PTX: converting EMBEDDED .ptx file to ptxplus \n");
+    printf("GPGPU-Sim PTX: converting EMBEDDED .ptx file to ptxplus \n");
 
     char fname_ptxplus[1024];
     snprintf(fname_ptxplus,1024,"_ptxplus_XXXXXX");
     int fd4=mkstemp(fname_ptxplus);
     close(fd4);
 
-	// Run cuobjdump_to_ptxplus
-	char commandline[1024];
-	int result;
-	snprintf(commandline, 1024, "$GPGPUSIM_ROOT/build/$GPGPUSIM_CONFIG/cuobjdump_to_ptxplus/cuobjdump_to_ptxplus %s %s %s %s",
-			ptxfilename.c_str(),
-			sassfilename.c_str(),
-			elffilename.c_str(),
-			fname_ptxplus);
-	fflush(stdout);
-	printf("GPGPU-Sim PTX: calling cuobjdump_to_ptxplus\ncommandline: %s\n", commandline);
-	result = system(commandline);
-	if(result){fprintf(stderr, "GPGPU-Sim PTX: ERROR ** could not execute %s\n", commandline); exit(1);}
+    // Run cuobjdump_to_ptxplus
+    char commandline[1024];
+    int result;
+    snprintf(commandline, 1024, "$GPGPUSIM_ROOT/build/$GPGPUSIM_CONFIG/cuobjdump_to_ptxplus/cuobjdump_to_ptxplus %s %s %s %s",
+            ptxfilename.c_str(),
+            sassfilename.c_str(),
+            elffilename.c_str(),
+            fname_ptxplus);
+    fflush(stdout);
+    printf("GPGPU-Sim PTX: calling cuobjdump_to_ptxplus\ncommandline: %s\n", commandline);
+    result = system(commandline);
+    if(result){fprintf(stderr, "GPGPU-Sim PTX: ERROR ** could not execute %s\n", commandline); exit(1);}
 
 
-	// Get ptxplus from file
-	std::ifstream fileStream(fname_ptxplus, std::ios::in);
-	std::string text, line;
-	while(getline(fileStream,line)) {
-		text += (line + "\n");
-	}
-	fileStream.close();
+    // Get ptxplus from file
+    std::ifstream fileStream(fname_ptxplus, std::ios::in);
+    std::string text, line;
+    while(getline(fileStream,line)) {
+        text += (line + "\n");
+    }
+    fileStream.close();
 
+    char* ptxplus_str = new char [strlen(text.c_str())+1];
+    strcpy(ptxplus_str, text.c_str());
 
-	if (!m_ptx_save_converted_ptxplus){
-		char rm_commandline[1024];
+    if (!m_ptx_save_converted_ptxplus){
+        char rm_commandline[1024];
 
-		snprintf(rm_commandline,1024,"rm -f %s", fname_ptxplus);
+        snprintf(rm_commandline,1024,"rm -f %s", fname_ptxplus);
 
-		printf("GPGPU-Sim PTX: removing temporary files using \"%s\"\n", rm_commandline);
-		int rm_result = system(rm_commandline);
-		if( rm_result != 0 ) {
-			fprintf(stderr, "GPGPU-Sim PTX: ERROR ** while removing temporary files %d\n", rm_result);
-			exit(1);
-		}
-	}
-	printf("GPGPU-Sim PTX: DONE converting EMBEDDED .ptx file to ptxplus \n");
+        printf("GPGPU-Sim PTX: removing temporary files using \"%s\"\n", rm_commandline);
+        int rm_result = system(rm_commandline);
+        if( rm_result != 0 ) {
+            fprintf(stderr, "GPGPU-Sim PTX: ERROR ** while removing temporary files %d\n", rm_result);
+            exit(1);
+        }
+    }
+    printf("GPGPU-Sim PTX: DONE converting EMBEDDED .ptx file to ptxplus \n");
 
-	return text;
+    return ptxplus_str;
 }
 
 
@@ -188,106 +190,106 @@ symbol_table *gpgpu_ptx_sim_load_ptx_from_string( const char *p, unsigned source
 }
 
 void fix_duplicate_errors(char fname2[1024]) {
-	char tempfile[1024] = "_temp_ptx";
-	char commandline[1024];
+    char tempfile[1024] = "_temp_ptx";
+    char commandline[1024];
 
-	// change the name of the ptx file to _temp_ptx
-	snprintf(commandline,1024,"mv %s %s",fname2,tempfile);
-	printf("Running: %s\n", commandline);
-	int result = system(commandline);
-	if (result != 0) {
-		fprintf(stderr, "GPGPU-Sim PTX: ERROR ** while changing filename from %s to %s", fname2, tempfile);
-		exit(1);
-	}
+    // change the name of the ptx file to _temp_ptx
+    snprintf(commandline,1024,"mv %s %s",fname2,tempfile);
+    printf("Running: %s\n", commandline);
+    int result = system(commandline);
+    if (result != 0) {
+        fprintf(stderr, "GPGPU-Sim PTX: ERROR ** while changing filename from %s to %s", fname2, tempfile);
+        exit(1);
+    }
 
-	// store all of the ptx into a char array
-	FILE *ptxsource = fopen(tempfile,"r");
-	fseek(ptxsource, 0, SEEK_END);
-	long filesize = ftell(ptxsource);
-	rewind(ptxsource);
-	char *ptxdata = (char*)malloc((filesize+1)*sizeof(char));
-	fread(ptxdata, filesize, 1, ptxsource);
-	fclose(ptxsource);
+    // store all of the ptx into a char array
+    FILE *ptxsource = fopen(tempfile,"r");
+    fseek(ptxsource, 0, SEEK_END);
+    long filesize = ftell(ptxsource);
+    rewind(ptxsource);
+    char *ptxdata = (char*)malloc((filesize+1)*sizeof(char));
+    fread(ptxdata, filesize, 1, ptxsource);
+    fclose(ptxsource);
 
-	FILE *ptxdest = fopen(fname2,"w");
-	std::map<unsigned,const char*> duplicate = get_duplicate();
-	unsigned offset;
-	unsigned oldlinenum = 1;
-	unsigned linenum;
-	char *startptr = ptxdata;
-	char *funcptr;
-	char *tempptr = ptxdata - 1;
-	char *lineptr = ptxdata - 1;
+    FILE *ptxdest = fopen(fname2,"w");
+    std::map<unsigned,const char*> duplicate = get_duplicate();
+    unsigned offset;
+    unsigned oldlinenum = 1;
+    unsigned linenum;
+    char *startptr = ptxdata;
+    char *funcptr;
+    char *tempptr = ptxdata - 1;
+    char *lineptr = ptxdata - 1;
 
-	// recreate the ptx file without duplications
-	for (	std::map<unsigned,const char*>::iterator iter = duplicate.begin();
-			iter != duplicate.end();
-			iter++){
-		// find the line of the next error
-		linenum = iter->first;
-		for (int i = oldlinenum; i < linenum; i++) {
-			lineptr = strchr(lineptr + 1, '\n');
-		}
-		
-		// find the end of the current section to be copied over
-		// then find the start of the next section that will be copied
-		if (strcmp("function", iter->second) == 0) {
-			// get location of most recent .func
-			while (tempptr < lineptr && tempptr != NULL) {
-				funcptr = tempptr;
-				tempptr = strstr(funcptr + 1, ".func");
-			}
+    // recreate the ptx file without duplications
+    for (   std::map<unsigned,const char*>::iterator iter = duplicate.begin();
+            iter != duplicate.end();
+            iter++){
+        // find the line of the next error
+        linenum = iter->first;
+        for (int i = oldlinenum; i < linenum; i++) {
+            lineptr = strchr(lineptr + 1, '\n');
+        }
+        
+        // find the end of the current section to be copied over
+        // then find the start of the next section that will be copied
+        if (strcmp("function", iter->second) == 0) {
+            // get location of most recent .func
+            while (tempptr < lineptr && tempptr != NULL) {
+                funcptr = tempptr;
+                tempptr = strstr(funcptr + 1, ".func");
+            }
 
-			// get the start of the previous line
-			offset = 0;
-			while (*(funcptr - offset) != '\n') offset++;
+            // get the start of the previous line
+            offset = 0;
+            while (*(funcptr - offset) != '\n') offset++;
 
-			fwrite(startptr, sizeof(char), funcptr - offset + 1 - startptr, ptxdest);
+            fwrite(startptr, sizeof(char), funcptr - offset + 1 - startptr, ptxdest);
 
-			//find next location of startptr
-			if (*(lineptr + 3) == ';') {
-				// for function definitions
-				startptr = lineptr + 5;
-			} else if (*(lineptr + 3) == '{') {
-				// for functions enclosed with curly brackets
-				offset = 5;
-				unsigned bracket = 1;
-				while (bracket != 0) {
-					if (*(lineptr + offset) == '{') bracket++;
-					else if (*(lineptr + offset) == '}') bracket--;
-					offset++;
-				}
-				startptr = lineptr + offset + 1;
-			} else {
-				printf("GPGPU-Sim PTX: ERROR ** Unrecognized function format\n");
-				abort();
-			}
-		} else if (strcmp("variable", iter->second) == 0) {
-			fwrite(startptr, sizeof(char), (int)(lineptr + 1 - startptr), ptxdest);
-			
-			//find next location of startptr
-			offset = 1;
-			while (*(lineptr + offset) != '\n') offset++;
-			startptr = lineptr + offset + 1;
-		} else {
-			printf("GPGPU-Sim PTX: ERROR ** Unsupported duplicate type: %s\n", iter->second);
-		}
+            //find next location of startptr
+            if (*(lineptr + 3) == ';') {
+                // for function definitions
+                startptr = lineptr + 5;
+            } else if (*(lineptr + 3) == '{') {
+                // for functions enclosed with curly brackets
+                offset = 5;
+                unsigned bracket = 1;
+                while (bracket != 0) {
+                    if (*(lineptr + offset) == '{') bracket++;
+                    else if (*(lineptr + offset) == '}') bracket--;
+                    offset++;
+                }
+                startptr = lineptr + offset + 1;
+            } else {
+                printf("GPGPU-Sim PTX: ERROR ** Unrecognized function format\n");
+                abort();
+            }
+        } else if (strcmp("variable", iter->second) == 0) {
+            fwrite(startptr, sizeof(char), (int)(lineptr + 1 - startptr), ptxdest);
+            
+            //find next location of startptr
+            offset = 1;
+            while (*(lineptr + offset) != '\n') offset++;
+            startptr = lineptr + offset + 1;
+        } else {
+            printf("GPGPU-Sim PTX: ERROR ** Unsupported duplicate type: %s\n", iter->second);
+        }
 
-		oldlinenum = linenum;
-	}
-	// copy over the rest of the file
-	fwrite(startptr, sizeof(char), ptxdata + filesize - startptr, ptxdest);
+        oldlinenum = linenum;
+    }
+    // copy over the rest of the file
+    fwrite(startptr, sizeof(char), ptxdata + filesize - startptr, ptxdest);
 
-	// cleanup
-	free(ptxdata);
-	fclose(ptxdest);
-	snprintf(commandline,1024,"rm -f %s",tempfile);
-	printf("Running: %s\n", commandline);
-	result = system(commandline);
-	if (result != 0) {
-		fprintf(stderr, "GPGPU-Sim PTX: ERROR ** while deleting %s", tempfile);
-		exit(1);
-	}
+    // cleanup
+    free(ptxdata);
+    fclose(ptxdest);
+    snprintf(commandline,1024,"rm -f %s",tempfile);
+    printf("Running: %s\n", commandline);
+    result = system(commandline);
+    if (result != 0) {
+        fprintf(stderr, "GPGPU-Sim PTX: ERROR ** while deleting %s", tempfile);
+        exit(1);
+    }
 }
 
 void gpgpu_ptxinfo_load_from_string( const char *p_for_info, unsigned source_num )
@@ -342,23 +344,23 @@ void gpgpu_ptxinfo_load_from_string( const char *p_for_info, unsigned source_num
     printf("GPGPU-Sim PTX: generating ptxinfo using \"%s\"\n", commandline);
     result = system(commandline);
     if( result != 0 ) {
-    	// 65280 = duplicate errors
-    	if (result == 65280) {
-    		ptxinfo_in = fopen(tempfile_ptxinfo,"r");
-		g_ptxinfo_filename = tempfile_ptxinfo;
-		ptxinfo_parse();
+        // 65280 = duplicate errors
+        if (result == 65280) {
+            ptxinfo_in = fopen(tempfile_ptxinfo,"r");
+        g_ptxinfo_filename = tempfile_ptxinfo;
+        ptxinfo_parse();
 
-    		fix_duplicate_errors(fname2);
-    		snprintf(commandline,1024,"$CUDA_INSTALL_PATH/bin/ptxas %s -v %s --output-file  /dev/null 2> %s",
-    			 extra_flags, fname2, tempfile_ptxinfo);
-    		printf("GPGPU-Sim PTX: regenerating ptxinfo using \"%s\"\n", commandline);
-    		result = system(commandline);
-	}
-	if (result != 0) {
-		fprintf(stderr, "GPGPU-Sim PTX: ERROR ** while loading PTX (b) %d\n", result);
-		fprintf(stderr, "               Ensure ptxas is in your path.\n");
-		exit(1);
-	}
+            fix_duplicate_errors(fname2);
+            snprintf(commandline,1024,"$CUDA_INSTALL_PATH/bin/ptxas %s -v %s --output-file  /dev/null 2> %s",
+                 extra_flags, fname2, tempfile_ptxinfo);
+            printf("GPGPU-Sim PTX: regenerating ptxinfo using \"%s\"\n", commandline);
+            result = system(commandline);
+    }
+    if (result != 0) {
+        fprintf(stderr, "GPGPU-Sim PTX: ERROR ** while loading PTX (b) %d\n", result);
+        fprintf(stderr, "               Ensure ptxas is in your path.\n");
+        exit(1);
+    }
     }
 
     ptxinfo_in = fopen(tempfile_ptxinfo,"r");
@@ -370,8 +372,8 @@ void gpgpu_ptxinfo_load_from_string( const char *p_for_info, unsigned source_num
         printf("GPGPU-Sim PTX: removing ptxinfo using \"%s\"\n", commandline);
         result = system(commandline);
         if( result != 0 ) {
-    	    fprintf(stderr, "GPGPU-Sim PTX: ERROR ** while loading PTX (c) %d\n", result);
-    	    exit(1);
+            fprintf(stderr, "GPGPU-Sim PTX: ERROR ** while loading PTX (c) %d\n", result);
+            exit(1);
         }
     }
 }
