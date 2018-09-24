@@ -1,0 +1,203 @@
+1) First thing is the call to cuda_runtime_api.cc::GPGPUSim_Init() (or the GPGPUSim_Context()) via the 
+first CUDA API call. 
+
+2) This calls the function gpgpu_ptx_sim_init_perf() in gpgpusim_entrypoint.cc. 
+There the environmental variables and command line arguments and configuration files 
+are parsed. The global variable g_the_gpu and g_stream_manager are initialized.
+
+3) The init function calls the start_sm_thread() which creates a new thread that
+will run the simulation. The thread rurns the function gpgpu_sim_thread_concurrent()
+which simulates concurrent executrion of multiple kernels 
+(defined via -gpgpu_max_concurrent_kernel)
+
+4) The thread initialized the relevant data structures and then waits for tasks
+from the stream manager. The streamer gets the job from the CUDA API (like kernel 
+launches, cudaMemcpy and cudaStreamCreate()).
+
+5) When assigned with a task, the thread first executes the functional_sim, and then
+the performance_sim. The functional sim calls the gpgpu_cuda_ptx_sim_main_funct(*kernel)
+
+6) After the end of every kernel, stats are prineted: print_stats(), update_stats(), 
+print_simulation_time()
+
+7) The kernels are executed one block at a time. The function cta.execute() starts
+running a kernel. In the end the number of instructions run are printed (using StatDisp),
+as well as the simultation time etc.
+
+8) the functionCoreSim::execute() function runs for all the warps, every line 
+of the kernel using the function executeWarp(). The instruction is executed with 
+the call to execute_warp_inst_t, which then calls the ptx_thread_info::ptx_exec_inst
+for each lane.
+This one seems to disassmeble the instuctions and executes them.
+
+9) The various instructions are implemented in the instructions.cc file.
+
+10) The OP_DEF is used to avoid having to re-write the same code every time 
+it needs to match an instruction.
+
+11) All the mapping from opcode to implementation are in the opcodes.def file. 
+
+12) After executing an instruction for a lane, it reports to the output.
+
+13) It also checks if the instruction referenced any memory address. These info 
+is passed with the warp_inst_t &inst object to the caller, which will be used by the 
+performance simulator. 
+
+14) Both the fucntionCoreSim and the shader_core_ctx derive from the core_t
+
+15) ICNT interconnection network
+
+16) The performance simulator communicates with the fucntional simulator using the 
+ptx_fetch_inst(pc) that returns a warp_isnt_t.
+
+
+Functional Simulator (cuda-sim):
+The functional simulation for the whole kernel is done in once. The performance
+simulation is done turn by turn.
+
+gpggpu_sim_thread_concurrent()
+    kernel = g_the_gpu->get_functional_kernel()
+    gpgpu_cuda_ptx_sim_main_func()
+        for each cta:
+            cta.execute()
+                initializeCTA()
+                    for each thread in the CTA:
+                        ptx_sim_init_thread()
+                for each warp:
+                    executeWarp()
+                        execute_warp_inst_t()
+                            for each lane:
+                                ptx_thread_info::ptx_exec_inst()
+                        checkExecutionStatusAndUpdate()
+
+
+Performance Simulator (gpgpu-sim):
+
+gpgpu_sim_thread_concurrent()
+    while g_the_gpu->active()
+        g_the_gpu->cycle()
+            get_next_clock_domain()
+            // domains: dram, icnw, l2, core
+            domain->cycle()
+            core:
+                writeback()
+                execute()
+                read_operands() // this is empty
+                issue()
+                decode()
+                fetch()
+
+
+
+fetch:
+    - Check for warps that completed execution (release resources)
+    - Select a warp via m_last_warp_fetched and access I-cache
+        - Hit: Send to decode stage
+        - Miss: Send instruction fetch request off core, try again after
+        I-cache is filled
+
+decode:
+    - obtain instruction (warp_inst_t) from the fuctional simulator
+    - push into I-buffer of the corresponding warp
+        - calls shd_warp_t::ibuffer_fill()
+        - can push up to 2 instructions per cycle
+
+Issue:
+    - calls scheduler_unit::cycle() for every instance of scheduler_unit
+    - calls shader_core_ctx::issue_warp() for each warp selected by the scheduler
+    unit
+        - Perform functional execution:
+            - Calls func_exec_inst()->execute_warp_inst_t()
+            - Coalesce memory accesses and push them into m_access_q in 
+            warp_inst_t:
+                - Calls warp_isnt_t::generate_mem_accesses()
+            - Update SIMT Stack for warp
+            - Lock output register(s) in scoreboard
+            - Send instruction to operand collector
+    - Scheduler unit:
+        - add_supervised_warp_id()
+        - cycle()
+        - scheduler for a subset of warps 
+            - Model dual scheduler in Fermi
+        - Warp can be issued if:
+            - Valid istruction in I-Buffer
+            - Instruction does not read/write locked registers (scoreboard)
+            - Execution unit is available
+    - Scoreboard:
+        - reserveRegister(): Lock register for instruction
+        - releaseRegiser(): Unlock register
+        - checkCollision(): Check if instruction accesses any locked register
+    - SIMT stack:
+        - launch()
+        - get_active_mask()
+        - update()
+        - Interacts with shader_core_ctx only in issue():
+            - in scheduler_unit::cycle(): calss get_active_mask()
+            - In shader_core_ctx::issue_warp()-> core_t::updateSIMTStack(): Calls
+            update() after fucntional execution
+
+Read operands:
+    - Operand collector:
+        - opndcoll_rfu_t::step() <- Cycle function
+            - For each input port, allocate_cu()
+                - Allocate a free collector unit for the warp instruction
+                - Push its register reads into queues in the arbiter unit
+            - allocate_reads()
+                - Process reads that have no bank conflict
+            - dispatch_ready_cu()
+                - Each dispatch unit selects a collector unit with fetched 
+                operands
+                - Sends its instruction to output port
+        - opndcoll_rfu_t::writeback()
+            - Allocate bank for writes to registers (has priorit over reads)
+
+Execution:
+    - Calls cycle for every fucntional unit
+        - ALU Units (SP, SFU)
+        - Memory Unit
+    - Implements a result bus reservation system for groups of ALU units that 
+    shares a common writeback bus
+        - Prevent stalling inside the units
+    - ALU Pipeline: 
+        - pipelined_simd_unit
+            - SP unit and SFU unit
+            - Intruction-dependent BW and Latency 
+        - ldst_unit
+            - Instantiates and operates on all in-core memories
+                - Texture_cache: m_L1T
+                - Constant cache: m_L1C
+                - Data cache: m_L1D
+                - Shared memory: m_pipeline_reg
+            - Off-core interface: m_icnt
+            - Mem_fetch allocator: m_mf_allocator
+            - Operates a a clock_multiplier() rate
+                - Model half-warps
+            - cycle()
+                - Process memory responses from m_response_fifo
+                - Service instruction at m_dispatch_reg
+                    - One access (mem_access_t)/ cycle
+                    - Stall until every access in instruction's m_access_q is processed
+                    - shared_cycle()
+                    - constant_cycle()
+                    - texture_cycle()
+                    - memory_cycle()
+            - writeback()
+                - Writeback for one of the component (client)
+                - Optional: Fill caches
+                - Writeback data ro register via operand collector
+                - Signal scoreboard to unlock register(s)
+
+Cache Models common interface:
+    - access(mem_fetch *mf)
+        - Probe the tag_array (no state change)
+        - Hit: Access the tag_array (Modifies LRU stack, line state)
+        - Miss: Try to allocate resource to handle miss
+            - A cache line for replacement
+            - Entry in mshr_table
+            - Entry in m_miss_queue
+            - Fail to allocate -> Return Resource Failure
+    - cycle()
+        - Move mem_fetch from m_miss_queue to m_memport
+    - fill()
+        - Update cache block status
+        - Mark entry in mshr_table as ready
