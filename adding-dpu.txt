@@ -1,0 +1,56 @@
+Add DPU support to GPGPU-Sim
+
+1) Make sure that some benchmakrs run on the current version to use as baseline.
+    In particular from ISPASS: CP, DG, LPS, RAY, WP
+
+    Seems than all of the benchmarks pass in the rodinia-2 benchmark
+
+2) What files/ functions should be changed:
+    * Configuration files/ option parsers:
+        * gpu-sim.cc: add option parser for various things like:
+            * gpgpu_operand_collector_num_units_dpu
+            * gpgpu_operand_collector_num_in_ports_dpu
+            * gpgpu_operand_collector_num_out_ports_dpu
+            * gpgpu_num_dpu_units
+        * configs/*/gpgpusim.config
+            * Add the proper configuration according to the SP and SFU
+    * shader.cc:shader_core_ctx() (constructor)
+        * line 216: add collector units for the dpus
+        * line 266: add to the total number of function units the dpus
+        * lines 272-278: for each dpu, add it to the m_fu, add to m_dispatch_port
+        and m_issue_port
+
+    * shader.cc:scheduler::cycle()
+        * this where the scheduler desides to which function units to issue the
+        instructions
+        * Here, for DP instructions we should prioritize the DPUs
+        * I need a way to tell if the instruction is DP (looking at the opcode)
+        * This logic should be added in this fucntion, somewhere in lines 878-920
+    
+    * shader.cc:swl_scheduler::swl_scheduler() (constructor)
+    to all scheduler constructors that take the register_set *sfu_out, add the DPUs
+
+    * inst.op_pipe should have a category for the DPUs (DP__OP)
+
+    * shader.{cc, h}: add constructor for the dpu
+        * similar to sfu::sfu in line 1506
+        * also imlpement the issue function
+        * the active_lanes_in_pipeline()
+
+    * shader.h: Add the necessary member variables, similarly to SP and SFU
+
+    * Statistics:
+        * power_stat.{cc, h}:
+            * Similar to the SPs and SFUs.
+
+    * Power:
+        * At first, I can disable the power estimation and focus on the 
+        functional and performance simulation
+        * power_interface.{cc, h}:
+            * according to lines 90-100, for DPUs
+        * gpuwattch/gpgpu_sim_wrapper.h lines 84-85
+        * gpuwattch/core.h: line 489 get_coefficient_sfu_accesses()
+        * gpuwattch/logic.cc: lines 697-698
+        * etc.. based on the sfu, dp
+
+
