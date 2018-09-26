@@ -124,10 +124,21 @@ Issue:
             - Instruction does not read/write locked registers (scoreboard)
             - Execution unit is available
     - Scoreboard:
+        - Checks for WAW and RAW dependency hazards. The scoreboard is indexed by 
+        the warp id, and stores for each warp the required register numbers. The 
+        registers are released in the write back stage. 
         - reserveRegister(): Lock register for instruction
         - releaseRegiser(): Unlock register
         - checkCollision(): Check if instruction accesses any locked register
+    - Register access and Operand collector
+        - The operand collector is a set of buffers and arbitration logic used to provide 
+        the appearence of a multiported register file using multiple banks of single 
+        ported RAMs.
     - SIMT stack:
+        - per warp, used to handle the execution of branch divergence. 
+        - GPGPU-Sim adopts the post-dominator stack-based reconvergence mechanism.
+        - A control hazard is detected if the next PC at top entry of the SIMT stack 
+        does not equal to the PC of the instruction currently under check. 
         - launch()
         - get_active_mask()
         - update()
@@ -135,6 +146,9 @@ Issue:
             - in scheduler_unit::cycle(): calss get_active_mask()
             - In shader_core_ctx::issue_warp()-> core_t::updateSIMTStack(): Calls
             update() after fucntional execution
+    - at the issue stage barrier operations are executed. Also, the SIMT stack is
+    udated and register dependencies are tracked. Warps wait for barriers 
+    ("__synchthreads()") at the issue stage.
 
 Read operands:
     - Operand collector:
