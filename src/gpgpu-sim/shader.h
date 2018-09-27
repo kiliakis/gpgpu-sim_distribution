@@ -317,12 +317,13 @@ public:
                    Scoreboard* scoreboard, simt_stack** simt, 
                    std::vector<shd_warp_t>* warp, 
                    register_set* sp_out,
+                   register_set* dp_out,
                    register_set* sfu_out,
                    register_set* mem_out,
                    int id) 
         : m_supervised_warps(), m_stats(stats), m_shader(shader),
         m_scoreboard(scoreboard), m_simt_stack(simt), /*m_pipeline_reg(pipe_regs),*/ m_warp(warp),
-        m_sp_out(sp_out),m_sfu_out(sfu_out),m_mem_out(mem_out), m_id(id){}
+        m_sp_out(sp_out),m_dp_out(dp_out),m_sfu_out(sfu_out),m_mem_out(mem_out), m_id(id){}
     virtual ~scheduler_unit(){}
     virtual void add_supervised_warp_id(int i) {
         m_supervised_warps.push_back(&warp(i));
@@ -394,6 +395,7 @@ protected:
     //warp_inst_t** m_pipeline_reg;
     std::vector<shd_warp_t>* m_warp;
     register_set* m_sp_out;
+    register_set* m_dp_out;
     register_set* m_sfu_out;
     register_set* m_mem_out;
 
@@ -406,10 +408,11 @@ public:
                     Scoreboard* scoreboard, simt_stack** simt,
                     std::vector<shd_warp_t>* warp,
                     register_set* sp_out,
+                    register_set* dp_out,
                     register_set* sfu_out,
                     register_set* mem_out,
                     int id )
-	: scheduler_unit ( stats, shader, scoreboard, simt, warp, sp_out, sfu_out, mem_out, id ){}
+	: scheduler_unit ( stats, shader, scoreboard, simt, warp, sp_out, dp_out, sfu_out, mem_out, id ){}
 	virtual ~lrr_scheduler () {}
 	virtual void order_warps ();
     virtual void done_adding_supervised_warps() {
@@ -423,10 +426,11 @@ public:
                     Scoreboard* scoreboard, simt_stack** simt,
                     std::vector<shd_warp_t>* warp,
                     register_set* sp_out,
+                    register_set* dp_out,
                     register_set* sfu_out,
                     register_set* mem_out,
                     int id )
-	: scheduler_unit ( stats, shader, scoreboard, simt, warp, sp_out, sfu_out, mem_out, id ){}
+	: scheduler_unit ( stats, shader, scoreboard, simt, warp, sp_out, dp_out, sfu_out, mem_out, id ){}
 	virtual ~gto_scheduler () {}
 	virtual void order_warps ();
     virtual void done_adding_supervised_warps() {
@@ -442,11 +446,12 @@ public:
                           Scoreboard* scoreboard, simt_stack** simt,
                           std::vector<shd_warp_t>* warp,
                           register_set* sp_out,
+                          register_set* dp_out,
                           register_set* sfu_out,
                           register_set* mem_out,
                           int id,
                           char* config_str )
-	: scheduler_unit ( stats, shader, scoreboard, simt, warp, sp_out, sfu_out, mem_out, id ),
+	: scheduler_unit ( stats, shader, scoreboard, simt, warp, sp_out, dp_out, sfu_out, mem_out, id ),
 	  m_pending_warps() 
     {
         unsigned inner_level_readin;
@@ -492,6 +497,7 @@ public:
                     Scoreboard* scoreboard, simt_stack** simt,
                     std::vector<shd_warp_t>* warp,
                     register_set* sp_out,
+                    register_set* dp_out,
                     register_set* sfu_out,
                     register_set* mem_out,
                     int id,
@@ -1081,6 +1087,25 @@ public:
     virtual void issue( register_set& source_reg );
 };
 
+class dp_unit : public pipelined_simd_unit
+{
+public:
+    dp_unit( register_set* result_port, const shader_core_config *config, shader_core_ctx *core );
+    virtual bool can_issue( const warp_inst_t &inst ) const
+    {
+        switch(inst.op) {
+        case SFU_OP: return false; 
+        case LOAD_OP: return false;
+        case STORE_OP: return false;
+        case MEMORY_BARRIER_OP: return false;
+        default: break;
+        }
+        return pipelined_simd_unit::can_issue(inst);
+    }
+    virtual void active_lanes_in_pipeline();
+    virtual void issue( register_set& source_reg );
+};
+
 class simt_core_cluster;
 class shader_memory_interface;
 class shader_core_mem_fetch_allocator;
@@ -1200,9 +1225,11 @@ protected:
 
 enum pipeline_stage_name_t {
     ID_OC_SP=0,
+    ID_OC_DP=0,
     ID_OC_SFU,  
     ID_OC_MEM,  
     OC_EX_SP,
+    OC_EX_DP,
     OC_EX_SFU,
     OC_EX_MEM,
     EX_WB,
@@ -1211,9 +1238,11 @@ enum pipeline_stage_name_t {
 
 const char* const pipeline_stage_name_decode[] = {
     "ID_OC_SP",
+    "ID_OC_DP",
     "ID_OC_SFU",  
     "ID_OC_MEM",  
     "OC_EX_SP",
+    "OC_EX_DP",
     "OC_EX_SFU",
     "OC_EX_MEM",
     "EX_WB",
@@ -1258,6 +1287,7 @@ struct shader_core_config : public core_config
         assert( !(n_thread_per_shader % warp_size) );
         max_sfu_latency = 512;
         max_sp_latency = 32;
+        max_dp_latency = 64;
         m_L1I_config.init(m_L1I_config.m_config_string,FuncCachePreferNone);
         m_L1T_config.init(m_L1T_config.m_config_string,FuncCachePreferNone);
         m_L1C_config.init(m_L1C_config.m_config_string,FuncCachePreferNone);
@@ -1303,21 +1333,25 @@ struct shader_core_config : public core_config
 
     //op collector
     int gpgpu_operand_collector_num_units_sp;
+    int gpgpu_operand_collector_num_units_dp;
     int gpgpu_operand_collector_num_units_sfu;
     int gpgpu_operand_collector_num_units_mem;
     int gpgpu_operand_collector_num_units_gen;
 
     unsigned int gpgpu_operand_collector_num_in_ports_sp;
+    unsigned int gpgpu_operand_collector_num_in_ports_dp;
     unsigned int gpgpu_operand_collector_num_in_ports_sfu;
     unsigned int gpgpu_operand_collector_num_in_ports_mem;
     unsigned int gpgpu_operand_collector_num_in_ports_gen;
 
     unsigned int gpgpu_operand_collector_num_out_ports_sp;
+    unsigned int gpgpu_operand_collector_num_out_ports_dp;
     unsigned int gpgpu_operand_collector_num_out_ports_sfu;
     unsigned int gpgpu_operand_collector_num_out_ports_mem;
     unsigned int gpgpu_operand_collector_num_out_ports_gen;
 
     int gpgpu_num_sp_units;
+    int gpgpu_num_dp_units;
     int gpgpu_num_sfu_units;
     int gpgpu_num_mem_units;
 
@@ -1330,6 +1364,7 @@ struct shader_core_config : public core_config
     bool gpgpu_local_mem_map;
     
     unsigned max_sp_latency;
+    unsigned max_dp_latency;
     unsigned max_sfu_latency;
     
     unsigned n_simt_cores_per_cluster;
@@ -1367,10 +1402,12 @@ struct shader_core_stats_pod {
     unsigned *m_num_idiv_acesses;
     unsigned *m_num_fpdiv_acesses;
     unsigned *m_num_sp_acesses;
+    unsigned *m_num_dp_acesses;
     unsigned *m_num_sfu_acesses;
     unsigned *m_num_trans_acesses;
     unsigned *m_num_mem_acesses;
     unsigned *m_num_sp_committed;
+    unsigned *m_num_dp_committed;
     unsigned *m_num_tlb_hits;
     unsigned *m_num_tlb_accesses;
     unsigned *m_num_sfu_committed;
@@ -1381,6 +1418,7 @@ struct shader_core_stats_pod {
     unsigned *m_num_imul24_acesses;
     unsigned *m_num_imul32_acesses;
     unsigned *m_active_sp_lanes;
+    unsigned *m_active_dp_lanes;
     unsigned *m_active_sfu_lanes;
     unsigned *m_active_fu_lanes;
     unsigned *m_active_fu_mem_lanes;
@@ -1451,13 +1489,16 @@ public:
         m_num_idiv_acesses= (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_num_fpdiv_acesses= (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_num_sp_acesses= (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
+        m_num_dp_acesses= (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_num_sfu_acesses= (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_num_trans_acesses= (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_num_mem_acesses= (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_num_sp_committed= (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
+        m_num_dp_committed= (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_num_tlb_hits=(unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_num_tlb_accesses=(unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_active_sp_lanes= (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
+        m_active_dp_lanes= (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_active_sfu_lanes= (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_active_fu_lanes= (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_active_fu_mem_lanes= (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
@@ -1730,7 +1771,8 @@ public:
 	 }
 
 	 void incsfu_stat(unsigned active_count,double latency) {m_stats->m_num_sfu_acesses[m_sid]=m_stats->m_num_sfu_acesses[m_sid]+active_count*latency;}
-	 void incsp_stat(unsigned active_count,double latency) {m_stats->m_num_sp_acesses[m_sid]=m_stats->m_num_sp_acesses[m_sid]+active_count*latency;}
+     void incsp_stat(unsigned active_count,double latency) {m_stats->m_num_sp_acesses[m_sid]=m_stats->m_num_sp_acesses[m_sid]+active_count*latency;}
+	 void incdp_stat(unsigned active_count,double latency) {m_stats->m_num_dp_acesses[m_sid]=m_stats->m_num_dp_acesses[m_sid]+active_count*latency;}
 	 void incmem_stat(unsigned active_count,double latency) {
 		if(m_config->gpgpu_clock_gated_lanes==false){
 		  m_stats->m_num_mem_acesses[m_sid]=m_stats->m_num_mem_acesses[m_sid]+active_count*latency
@@ -1745,7 +1787,8 @@ public:
 	 void incregfile_writes(unsigned active_count){m_stats->m_write_regfile_acesses[m_sid]=m_stats->m_write_regfile_acesses[m_sid]+active_count;}
 	 void incnon_rf_operands(unsigned active_count){m_stats->m_non_rf_operands[m_sid]=m_stats->m_non_rf_operands[m_sid]+active_count;}
 
-	 void incspactivelanes_stat(unsigned active_count) {m_stats->m_active_sp_lanes[m_sid]=m_stats->m_active_sp_lanes[m_sid]+active_count;}
+     void incspactivelanes_stat(unsigned active_count) {m_stats->m_active_sp_lanes[m_sid]=m_stats->m_active_sp_lanes[m_sid]+active_count;}
+	 void incdpactivelanes_stat(unsigned active_count) {m_stats->m_active_dp_lanes[m_sid]=m_stats->m_active_dp_lanes[m_sid]+active_count;}
 	 void incsfuactivelanes_stat(unsigned active_count) {m_stats->m_active_sfu_lanes[m_sid]=m_stats->m_active_sfu_lanes[m_sid]+active_count;}
 	 void incfuactivelanes_stat(unsigned active_count) {m_stats->m_active_fu_lanes[m_sid]=m_stats->m_active_fu_lanes[m_sid]+active_count;}
 	 void incfumemactivelanes_stat(unsigned active_count) {m_stats->m_active_fu_mem_lanes[m_sid]=m_stats->m_active_fu_mem_lanes[m_sid]+active_count;}

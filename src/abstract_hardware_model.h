@@ -131,6 +131,7 @@ typedef enum special_operations_t special_ops; // Required to identify for the p
 enum operation_pipeline_t {
     UNKOWN_OP,
     SP__OP,
+    DP__OP,
     SFU__OP,
     MEM__OP
 };

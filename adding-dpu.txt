@@ -8,17 +8,18 @@ Add DPU support to GPGPU-Sim
 2) What files/ functions should be changed:
     * Configuration files/ option parsers:
         * gpu-sim.cc: add option parser for various things like:
-            * gpgpu_operand_collector_num_units_dpu
-            * gpgpu_operand_collector_num_in_ports_dpu
-            * gpgpu_operand_collector_num_out_ports_dpu
-            * gpgpu_num_dpu_units
+            * gpgpu_operand_collector_num_units_dp                              done  
+            * gpgpu_operand_collector_num_in_ports_dp                           done
+            * gpgpu_operand_collector_num_out_ports_dp                          done
+            * gpgpu_num_dp_units                                                done
         * configs/*/gpgpusim.config
-            * Add the proper configuration according to the SP and SFU
-    * shader.cc:shader_core_ctx() (constructor)
-        * line 216: add collector units for the dpus
-        * line 266: add to the total number of function units the dpus
-        * lines 272-278: for each dpu, add it to the m_fu, add to m_dispatch_port
-        and m_issue_port
+            * Add the proper configuration according to the SP and SFU          done
+
+    * shader.cc:shader_core_ctx() (constructor)                                 done
+        * line 216: add collector units for the dpus                            done
+        * line 266: add to the total number of function units the dpus          done
+        * lines 272-278: for each dpu, add it to the m_fu, add to               done 
+        m_dispatch_port and m_issue_port
 
     * shader.cc:scheduler::cycle()
         * this where the scheduler desides to which function units to issue the
@@ -27,30 +28,65 @@ Add DPU support to GPGPU-Sim
         * I need a way to tell if the instruction is DP (looking at the opcode)
         * This logic should be added in this fucntion, somewhere in lines 878-920
     
-    * shader.cc:swl_scheduler::swl_scheduler() (constructor)
-    to all scheduler constructors that take the register_set *sfu_out, add the DPUs
+    * shader.cc:swl_scheduler::swl_scheduler() (constructor)                    done
+    to all scheduler constructors that take the register_set *sfu_out,          done
+    add the DPUs                                                
 
-    * inst.op_pipe should have a category for the DPUs (DP__OP)
+    * inst.op_pipe should have a category for the DPUs (DP__OP)                 done
 
-    * shader.{cc, h}: add constructor for the dpu
-        * similar to sfu::sfu in line 1506
-        * also imlpement the issue function
-        * the active_lanes_in_pipeline()
+    * shader.{cc, h}: add constructor for the dpu                               done
+        * similar to sfu::sfu in line 1506                                      done
+        * also imlpement the issue function                                     done
+        * the active_lanes_in_pipeline()                                        done
 
-    * shader.h: Add the necessary member variables, similarly to SP and SFU
+    * shader.h: Add the necessary member variables, similarly to SP and SFU     done
 
     * Statistics:
-        * power_stat.{cc, h}:
-            * Similar to the SPs and SFUs.
+        * power_stat.{cc, h}:                                                   skipped
+            * Similar to the SPs and SFUs.                                      skipped
 
-    * Power:
-        * At first, I can disable the power estimation and focus on the 
-        functional and performance simulation
-        * power_interface.{cc, h}:
-            * according to lines 90-100, for DPUs
-        * gpuwattch/gpgpu_sim_wrapper.h lines 84-85
-        * gpuwattch/core.h: line 489 get_coefficient_sfu_accesses()
-        * gpuwattch/logic.cc: lines 697-698
-        * etc.. based on the sfu, dp
+    * Power:                                                                    
+        * At first, I can disable the power estimation and focus on the         skipped
+        functional and performance simulation                                   skipped
+        * power_interface.{cc, h}:                                              skipped
+            * according to lines 90-100, for DPUs                               skipped
+        * gpuwattch/gpgpu_sim_wrapper.h lines 84-85                             skipped
+        * gpuwattch/core.h: line 489 get_coefficient_sfu_accesses()             skipped
+        * gpuwattch/logic.cc: lines 697-698                                     skipped
+        * etc.. based on the sfu, dp                                            skipped
 
+3) Things to check for and correct:
+    * N_PIPELINE_STAGES                                                         done
+    * pipe_widths                                                               done
+    * n_num_function_units                                                      done
+    * gpgpu_num_sp_units                                                        done
+    * sp_unit (class)                                                           done
+    * gpgpu_operand_collector_num_units_sp                                      done
+    * gpgpu_operand_collector_num_in_ports_sp                                   done
+    * gpgpu_operand_collector_num_out_ports_sp                                  done
+    * max_sp_latency                                                            done
+    * m_num_sp_accesses                                                         done
+    * m_num_sp_commited                                                         done
+    * m_active_sp_lanes                                                         done
+    * SP_CUS                                                                    done
+    * ID_OC_SP                                                                  done
+    * OC_EX_SP                                                                  done
+    * SP__OP                                                                    done
+    * incsp_stat                                                                done
+    * incspactivelanes_stat                                                     done
+    * special_operations_t
+    * lrr_scheduler (add parameter)                                             done
+    * two_level_active_scheduler (add parameter)                                done
+    * gto_scheduler (add parameter)                                             done
+    * swl_scheduler (add parameter)                                             done
+    * scheduler_unit (add parameter)                                            done
+    * operation_pipeline, operation_pipeline_t          
+    * F64_TYPE, where it comes from?
+    * m_sp_out
 
+4) Assumptions/ need to be revised
+    * max_dp_latency == 64 (2* max_sp_latency)
+    * Should I add an OP like SFU_OP? I don't thnik so, but have a look
+    * special_operations_t, FP__OP
+    * Or a uarch operand type?
+    * I added an DP__OP enum operation_pipeline{_t}
