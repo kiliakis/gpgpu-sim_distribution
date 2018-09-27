@@ -1391,6 +1391,7 @@ struct shader_core_stats_pod {
     unsigned *m_num_decoded_insn; // number of instructions decoded by this shader core
     float *m_pipeline_duty_cycle;
     unsigned *m_num_FPdecoded_insn;
+    unsigned *m_num_FP64decoded_insn;
     unsigned *m_num_INTdecoded_insn;
     unsigned *m_num_storequeued_insn;
     unsigned *m_num_loadqueued_insn;
@@ -1476,6 +1477,7 @@ public:
         m_pipeline_duty_cycle=(float*) calloc(config->num_shader(),sizeof(float));
         m_num_decoded_insn = (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_num_FPdecoded_insn = (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
+        m_num_FP64decoded_insn = (unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_num_storequeued_insn=(unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_num_loadqueued_insn=(unsigned*) calloc(config->num_shader(),sizeof(unsigned));
         m_num_INTdecoded_insn = (unsigned*) calloc(config->num_shader(),sizeof(unsigned));

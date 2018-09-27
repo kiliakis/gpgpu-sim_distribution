@@ -281,8 +281,8 @@ shader_core_ctx::shader_core_ctx( class gpgpu_sim *gpu,
     // execute
     m_num_function_units = m_config->gpgpu_num_sp_units
                            + m_config->gpgpu_num_dp_units
-                           + m_config->gpgpu_num_sfu_units + 1; 
-                           // sp_unit, dp_unit, sfu, ldst_unit
+                           + m_config->gpgpu_num_sfu_units + 1;
+    // sp_unit, dp_unit, sfu, ldst_unit
     //m_dispatch_port = new enum pipeline_stage_name_t[ m_num_function_units ];
     //m_issue_port = new enum pipeline_stage_name_t[ m_num_function_units ];
 
@@ -618,6 +618,8 @@ void shader_core_ctx::decode()
                 m_stats->m_num_INTdecoded_insn[m_sid]++;
             } else if (pI1->oprnd_type == FP_OP) {
                 m_stats->m_num_FPdecoded_insn[m_sid]++;
+            } else if (pI1->oprnd_type == FP64_OP) {
+                m_stats->m_num_FP64decoded_insn[m_sid]++;
             }
             const warp_inst_t* pI2 = ptx_fetch_inst(pc + pI1->isize);
             if ( pI2 ) {
@@ -628,6 +630,8 @@ void shader_core_ctx::decode()
                     m_stats->m_num_INTdecoded_insn[m_sid]++;
                 } else if (pI2->oprnd_type == FP_OP) {
                     m_stats->m_num_FPdecoded_insn[m_sid]++;
+                } else if (pI2->oprnd_type == FP64_OP) {
+                    m_stats->m_num_FP64decoded_insn[m_sid]++;
                 }
             }
         }
@@ -909,8 +913,35 @@ void scheduler_unit::cycle()
                             }
                         } else {
                             bool sp_pipe_avail = m_sp_out->has_free();
+                            bool dp_pipe_avail = m_dp_out->has_free();
                             bool sfu_pipe_avail = m_sfu_out->has_free();
-                            if ( sp_pipe_avail && (pI->op != SFU_OP) ) {
+
+                            if (dp_pipe_avail && (pI->op != SFU_OP) && (pI->oprnd_type == FP64_OP)) {
+                                //Jin: special for CDP api
+                                if (pI->m_is_cdp && !warp(warp_id).m_cdp_dummy) {
+                                    assert(warp(warp_id).m_cdp_latency == 0);
+
+                                    extern unsigned cdp_latency[5];
+                                    if (pI->m_is_cdp == 1)
+                                        warp(warp_id).m_cdp_latency = cdp_latency[pI->m_is_cdp - 1];
+                                    else //cudaLaunchDeviceV2 and cudaGetParameterBufferV2
+                                        warp(warp_id).m_cdp_latency = cdp_latency[pI->m_is_cdp - 1]
+                                                                      + cdp_latency[pI->m_is_cdp] * active_mask.count();
+                                    warp(warp_id).m_cdp_dummy = true;
+                                    break;
+                                }
+                                else if (pI->m_is_cdp && warp(warp_id).m_cdp_dummy) {
+                                    assert(warp(warp_id).m_cdp_latency == 0);
+                                    warp(warp_id).m_cdp_dummy = false;
+                                }
+
+                                // always prefer DP pipe for operations that can use both DP and SFU pipelines
+                                m_shader->issue_warp(*m_dp_out, pI, active_mask, warp_id);
+                                issued++;
+                                issued_inst = true;
+                                warp_inst_issued = true;
+
+                            } else if ( sp_pipe_avail && (pI->op != SFU_OP) ) {
 
                                 //Jin: special for CDP api
                                 if (pI->m_is_cdp && !warp(warp_id).m_cdp_dummy) {

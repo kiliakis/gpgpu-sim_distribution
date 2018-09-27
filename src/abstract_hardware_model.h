@@ -108,7 +108,8 @@ typedef enum uarch_red_t reduction_type;
 enum uarch_operand_type_t {
     UN_OP = -1,
     INT_OP,
-    FP_OP
+    FP_OP,
+    FP64_OP
 };
 typedef enum uarch_operand_type_t types_of_operands;
 
