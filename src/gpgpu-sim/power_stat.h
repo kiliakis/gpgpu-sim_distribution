@@ -45,6 +45,7 @@ struct shader_core_power_stats_pod {
     float *m_pipeline_duty_cycle[NUM_STAT_IDX];
     unsigned *m_num_decoded_insn[NUM_STAT_IDX]; // number of instructions committed by this shader core
     unsigned *m_num_FPdecoded_insn[NUM_STAT_IDX]; // number of instructions committed by this shader core
+    unsigned *m_num_FP64decoded_insn[NUM_STAT_IDX]; // number of instructions committed by this shader core
     unsigned *m_num_INTdecoded_insn[NUM_STAT_IDX]; // number of instructions committed by this shader core
     unsigned *m_num_storequeued_insn[NUM_STAT_IDX];
     unsigned *m_num_loadqueued_insn[NUM_STAT_IDX];
@@ -58,13 +59,16 @@ struct shader_core_power_stats_pod {
     unsigned *m_num_idiv_acesses[NUM_STAT_IDX];
     unsigned *m_num_fpdiv_acesses[NUM_STAT_IDX];
     unsigned *m_num_sp_acesses[NUM_STAT_IDX];
+    unsigned *m_num_dp_acesses[NUM_STAT_IDX];
     unsigned *m_num_sfu_acesses[NUM_STAT_IDX];
     unsigned *m_num_trans_acesses[NUM_STAT_IDX];
     unsigned *m_num_mem_acesses[NUM_STAT_IDX];
     unsigned *m_num_sp_committed[NUM_STAT_IDX];
+    unsigned *m_num_dp_committed[NUM_STAT_IDX];
     unsigned *m_num_sfu_committed[NUM_STAT_IDX];
     unsigned *m_num_mem_committed[NUM_STAT_IDX];
     unsigned *m_active_sp_lanes[NUM_STAT_IDX];
+    unsigned *m_active_dp_lanes[NUM_STAT_IDX];
     unsigned *m_active_sfu_lanes[NUM_STAT_IDX];
     unsigned *m_read_regfile_acesses[NUM_STAT_IDX];
     unsigned *m_write_regfile_acesses[NUM_STAT_IDX];
@@ -159,6 +163,13 @@ public:
         }
         return total_inst;
     }
+    unsigned get_total_fp64_inst(){
+        unsigned total_inst=0;
+        for(unsigned i=0; i<m_config->num_shader();i++){
+            total_inst+=(pwr_core_stat->m_num_FP64decoded_insn[CURRENT_STAT_IDX][i]) - (pwr_core_stat->m_num_FP64decoded_insn[PREV_STAT_IDX][i]);
+        }
+        return total_inst;
+    }
     unsigned get_total_load_inst(){
         unsigned total_inst=0;
         for(unsigned i=0; i<m_config->num_shader();i++){
@@ -177,6 +188,13 @@ public:
         unsigned total_inst=0;
         for(unsigned i=0; i<m_config->num_shader();i++){
             total_inst+=(pwr_core_stat->m_num_sp_committed[CURRENT_STAT_IDX][i]) - (pwr_core_stat->m_num_sp_committed[PREV_STAT_IDX][i]);
+        }
+        return total_inst;
+    }
+    unsigned get_dp_committed_inst(){
+        unsigned total_inst=0;
+        for(unsigned i=0; i<m_config->num_shader();i++){
+            total_inst+=(pwr_core_stat->m_num_dp_committed[CURRENT_STAT_IDX][i]) - (pwr_core_stat->m_num_dp_committed[PREV_STAT_IDX][i]);
         }
         return total_inst;
     }
@@ -199,6 +217,7 @@ public:
         for(unsigned i=0; i<m_config->num_shader();i++){
             total_inst+=(pwr_core_stat->m_num_mem_committed[CURRENT_STAT_IDX][i]) - (pwr_core_stat->m_num_mem_committed[PREV_STAT_IDX][i])
                     +(pwr_core_stat->m_num_sfu_committed[CURRENT_STAT_IDX][i]) - (pwr_core_stat->m_num_sfu_committed[PREV_STAT_IDX][i])
+                    +(pwr_core_stat->m_num_dp_committed[CURRENT_STAT_IDX][i]) - (pwr_core_stat->m_num_dp_committed[PREV_STAT_IDX][i])
                     +(pwr_core_stat->m_num_sp_committed[CURRENT_STAT_IDX][i]) - (pwr_core_stat->m_num_sp_committed[PREV_STAT_IDX][i]);
         }
         return total_inst;
@@ -238,6 +257,14 @@ public:
         unsigned total_inst=0;
         for(unsigned i=0; i<m_config->num_shader();i++){
             total_inst+=(pwr_core_stat->m_num_sp_acesses[CURRENT_STAT_IDX][i]) - (pwr_core_stat->m_num_sp_acesses[PREV_STAT_IDX][i]);
+        }
+        return total_inst;
+    }
+
+    unsigned get_dp_accessess(){
+        unsigned total_inst=0;
+        for(unsigned i=0; i<m_config->num_shader();i++){
+            total_inst+=(pwr_core_stat->m_num_dp_acesses[CURRENT_STAT_IDX][i]) - (pwr_core_stat->m_num_dp_acesses[PREV_STAT_IDX][i]);
         }
         return total_inst;
     }
@@ -323,6 +350,15 @@ public:
         return (total_inst/m_config->num_shader())/m_config->gpgpu_num_sp_units;
     }
 
+    float get_dp_active_lanes(){
+        unsigned total_inst=0;
+        for(unsigned i=0; i<m_config->num_shader();i++){
+            total_inst+=(pwr_core_stat->m_active_dp_lanes[CURRENT_STAT_IDX][i]) - (pwr_core_stat->m_active_dp_lanes[PREV_STAT_IDX][i]);
+        }
+        return (total_inst/m_config->num_shader())/m_config->gpgpu_num_dp_units;
+    }
+
+
     float get_sfu_active_lanes(){
         unsigned total_inst=0;
         for(unsigned i=0; i<m_config->num_shader();i++){
@@ -336,6 +372,7 @@ public:
         unsigned total_inst=0;
         for(unsigned i=0; i<m_config->num_shader();i++){
             total_inst+=(pwr_core_stat->m_num_fp_acesses[CURRENT_STAT_IDX][i]) - (pwr_core_stat->m_num_fp_acesses[PREV_STAT_IDX][i])+
+                    // (pwr_core_stat->m_num_fp_acesses[CURRENT_STAT_IDX][i]) - (pwr_core_stat->m_num_fp_acesses[PREV_STAT_IDX][i])+
                     (pwr_core_stat->m_num_fpdiv_acesses[CURRENT_STAT_IDX][i]) - (pwr_core_stat->m_num_fpdiv_acesses[PREV_STAT_IDX][i])+
                     (pwr_core_stat->m_num_fpmul_acesses[CURRENT_STAT_IDX][i]) - (pwr_core_stat->m_num_fpmul_acesses[PREV_STAT_IDX][i])+
                     (pwr_core_stat->m_num_imul24_acesses[CURRENT_STAT_IDX][i]) - (pwr_core_stat->m_num_imul24_acesses[PREV_STAT_IDX][i])+

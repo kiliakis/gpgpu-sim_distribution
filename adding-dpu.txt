@@ -85,6 +85,10 @@ Add DPU support to GPGPU-Sim
     * F64_TYPE, where it comes from?                                            done
     * m_sp_out                                                                  done
     * m_num_FPdecoded_insn                                                      done
+    * get_total_fp_inst
+    * get_sp_commited_inst
+    * get_sp_accessess
+    * avg_dp_active_lanes
 
 4) Assumptions that might need to be revised
     * max_dp_latency == 64 (2* max_sp_latency)
