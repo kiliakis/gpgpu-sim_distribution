@@ -1317,7 +1317,7 @@ void shader_core_ctx::warp_inst_complete(const warp_inst_t &inst)
 #endif
     if (inst.op_pipe == SP__OP)
         m_stats->m_num_sp_committed[m_sid]++;
-    if (inst.op_pipe == DP__OP)
+    else if (inst.op_pipe == DP__OP)
         m_stats->m_num_dp_committed[m_sid]++;
     else if (inst.op_pipe == SFU__OP)
         m_stats->m_num_sfu_committed[m_sid]++;

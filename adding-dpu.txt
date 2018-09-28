@@ -97,6 +97,15 @@ Add DPU support to GPGPU-Sim
     * Or a uarch operand type?
     * I added an DP__OP enum operation_pipeline{_t}
     * I added oprnd_type FP64_OP in the ptx_instruction::set_fp_or_int_archop
+    * need to debug the deadlock                                                done
+    * It is triggered from gpu-sim.cc:1590 because 
+    gpu_sim_insn == last_gpu_sim_insn.
+    * Look where the gpu_sim_insn is updated
+        * It is updated in shader.cc: line 1333
+        * function warp_inst_complete
+            1. Where is this function called from?
+                * shader_core_ctx::writeback()
+            2. it is updated by active_count() 
 
 5) Useful notes:
     * a warp_inst_t derives from inst_t

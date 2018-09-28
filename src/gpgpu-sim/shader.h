@@ -1225,7 +1225,7 @@ protected:
 
 enum pipeline_stage_name_t {
     ID_OC_SP=0,
-    ID_OC_DP=0,
+    ID_OC_DP,
     ID_OC_SFU,  
     ID_OC_MEM,  
     OC_EX_SP,
