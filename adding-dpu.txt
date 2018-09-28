@@ -106,6 +106,23 @@ Add DPU support to GPGPU-Sim
             1. Where is this function called from?
                 * shader_core_ctx::writeback()
             2. it is updated by active_count() 
+    * To model the execution latency and throughput of double 
+    instructions:
+        * If no DPUs:
+            * Everything is executed throught the SPs (with high 
+            latency/bandwidth if double precision)
+        * If DPUs:
+            * All double precision goes to the DPUs (with 
+            latency/bandwidth equal to the single precision)
+            * All single precision goes to the SPUs
+        * This means that effectively, the bandwidth of double precision/ 
+        single is equal to DPUs/SPUs.
+        * To do that, I need:
+            * Two latencies for dp operations, 1 if run on SP and 1 if run on DP.
+            * Let's call them latency and latency_dpu
+            * By default the dpu_dp will be equal to the spu_fp.
+            * Two implementations of the pipelined_simd_unit::cycle()
+                * If it is a DPU, it uses the latency_dpu (and initiation_interval_dpu)
 
 5) Useful notes:
     * a warp_inst_t derives from inst_t
