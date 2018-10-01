@@ -897,7 +897,7 @@ public:
     {
         m_empty = true;
     }
-    void issue( const active_mask_t &mask, unsigned warp_id, unsigned long long cycle, int dynamic_warp_id, bool inDPU=false)
+    void issue( const active_mask_t &mask, unsigned warp_id, unsigned long long cycle, int dynamic_warp_id)
     {
         m_warp_active_mask = mask;
         m_warp_issued_mask = mask;
@@ -905,10 +905,7 @@ public:
         m_warp_id = warp_id;
         m_dynamic_warp_id = dynamic_warp_id;
         issue_cycle = cycle;
-        if(inDPU)
-            cycles = initiation_interval_dpu;
-        else
-            cycles = initiation_interval;
+        cycles = initiation_interval;
         m_cache_hit = false;
         m_empty = false;
     }

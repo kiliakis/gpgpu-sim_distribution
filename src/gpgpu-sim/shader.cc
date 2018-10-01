@@ -728,7 +728,7 @@ void shader_core_ctx::func_exec_inst( warp_inst_t &inst )
         inst.generate_mem_accesses();
 }
 
-void shader_core_ctx::issue_warp( register_set& pipe_reg_set, const warp_inst_t* next_inst, const active_mask_t &active_mask, unsigned warp_id, bool inDPU)
+void shader_core_ctx::issue_warp( register_set& pipe_reg_set, const warp_inst_t* next_inst, const active_mask_t &active_mask, unsigned warp_id)
 {
     warp_inst_t** pipe_reg = pipe_reg_set.get_free();
     assert(pipe_reg);
@@ -736,7 +736,7 @@ void shader_core_ctx::issue_warp( register_set& pipe_reg_set, const warp_inst_t*
     m_warp[warp_id].ibuffer_free();
     assert(next_inst->valid());
     **pipe_reg = *next_inst; // static instruction information
-    (*pipe_reg)->issue( active_mask, warp_id, gpu_tot_sim_cycle + gpu_sim_cycle, m_warp[warp_id].get_dynamic_warp_id(), inDPU); // dynamic instruction information
+    (*pipe_reg)->issue( active_mask, warp_id, gpu_tot_sim_cycle + gpu_sim_cycle, m_warp[warp_id].get_dynamic_warp_id()); // dynamic instruction information
     m_stats->shader_cycle_distro[2 + (*pipe_reg)->active_count()]++;
     func_exec_inst( **pipe_reg );
     if ( next_inst->op == BARRIER_OP ) {
@@ -942,7 +942,7 @@ void scheduler_unit::cycle()
                                 // always prefer DP pipe for operations that can use both DP and SFU pipelines
                                 pI->latency = pI->latency_dpu;
                                 pI->initiation_interval = pI->initiation_interval_dpu;
-                                m_shader->issue_warp(*m_dp_out, pI, active_mask, warp_id, true);
+                                m_shader->issue_warp(*m_dp_out, pI, active_mask, warp_id);
                                 issued++;
                                 issued_inst = true;
                                 warp_inst_issued = true;
