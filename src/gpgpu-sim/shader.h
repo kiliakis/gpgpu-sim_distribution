@@ -1100,13 +1100,10 @@ public:
         case MEMORY_BARRIER_OP: return false;
         default: break;
         }
-        return (m_dispatch_reg->empty() && !occupied.test(inst.latency_dpu));
-        // return pipelined_simd_unit::can_issue(inst);
+        return pipelined_simd_unit::can_issue(inst);
     }
     virtual void active_lanes_in_pipeline();
     virtual void issue( register_set& source_reg );
-    void cycle();
-
 };
 
 class simt_core_cluster;

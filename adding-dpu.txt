@@ -129,12 +129,14 @@ Add DPU support to GPGPU-Sim
                 (and initiation_interval_dpu)
         * in warp_inst_t.cycles = initiation_interval in the issue function     done
             * Is this ok? where is it used?
-            * Maybe add another option to specify whether it is a dp operation  done
+            * Maybe add another option to specify whether it is a dp operation  done (not needed option)
             on a dpu?
-            * issue_warp in shader.cc calls warp_isnt_t::issue()
+            * issue_warp in shader.cc calls warp_isnt_t::issue()                done
             * scheduler->cycle() calls the issue_warp. So we pass something to  done
             issue_warp to signify that we have a dpu executing.
-        * added the dp_unit::cycle implementation, need to check that is called
+        * added the dp_unit::cycle implementation, need to check that is called done
+        * when issueing the instruction to the dpu, I update it's latency and 
+        initiation_interval 
 
 5) Useful notes:
     * a warp_inst_t derives from inst_t

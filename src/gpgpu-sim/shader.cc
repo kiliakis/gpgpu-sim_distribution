@@ -1272,11 +1272,7 @@ void shader_core_ctx::execute()
         if ( issue_inst.has_ready() && m_fu[n]->can_issue( **ready_reg ) ) {
             bool schedule_wb_now = !m_fu[n]->stallable();
             int resbus = -1;
-            // if(n==2 && ( schedule_wb_now && (resbus = test_res_bus( (*ready_reg)->latency_dpu)) != -1 )){
-            //     assert( (*ready_reg)->latency_dpu < MAX_ALU_LATENCY );
-            //     m_result_bus[resbus]->set( (*ready_reg)->latency_dpu );
-            //     m_fu[n]->issue( issue_inst );
-            // }
+            
             if ( schedule_wb_now && (resbus = test_res_bus( (*ready_reg)->latency )) != -1 ) {
                 assert( (*ready_reg)->latency < MAX_ALU_LATENCY );
                 m_result_bus[resbus]->set( (*ready_reg)->latency );
@@ -1647,26 +1643,8 @@ void dp_unit::issue(register_set& source_reg)
     warp_inst_t** ready_reg = source_reg.get_ready();
     //m_core->incexecstat((*ready_reg));
     (*ready_reg)->op_pipe = DP__OP;
-    m_core->incdp_stat(m_core->get_config()->warp_size, (*ready_reg)->latency_dpu);
-    source_reg.move_out_to(m_dispatch_reg); 
-    occupied.set(m_dispatch_reg->latency_dpu);
-    // pipelined_simd_unit::issue(source_reg);
-}
-
-void dp_unit::cycle()
-{
-    if ( !m_pipeline_reg[0]->empty() ) {
-        m_result_port->move_in(m_pipeline_reg[0]);
-    }
-    for ( unsigned stage = 0; (stage + 1) < m_pipeline_depth; stage++ )
-        move_warp(m_pipeline_reg[stage], m_pipeline_reg[stage + 1]);
-    if ( !m_dispatch_reg->empty() ) {
-        if ( !m_dispatch_reg->dispatch_delay()) {
-            int start_stage = m_dispatch_reg->latency_dpu - m_dispatch_reg->initiation_interval_dpu;
-            move_warp(m_pipeline_reg[start_stage], m_dispatch_reg);
-        }
-    }
-    occupied >>= 1;
+    m_core->incdp_stat(m_core->get_config()->warp_size, (*ready_reg)->latency);
+    pipelined_simd_unit::issue(source_reg);
 }
 
 
