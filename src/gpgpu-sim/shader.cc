@@ -728,7 +728,7 @@ void shader_core_ctx::func_exec_inst( warp_inst_t &inst )
         inst.generate_mem_accesses();
 }
 
-void shader_core_ctx::issue_warp( register_set& pipe_reg_set, const warp_inst_t* next_inst, const active_mask_t &active_mask, unsigned warp_id )
+void shader_core_ctx::issue_warp( register_set& pipe_reg_set, const warp_inst_t* next_inst, const active_mask_t &active_mask, unsigned warp_id, bool inDPU)
 {
     warp_inst_t** pipe_reg = pipe_reg_set.get_free();
     assert(pipe_reg);
@@ -736,7 +736,7 @@ void shader_core_ctx::issue_warp( register_set& pipe_reg_set, const warp_inst_t*
     m_warp[warp_id].ibuffer_free();
     assert(next_inst->valid());
     **pipe_reg = *next_inst; // static instruction information
-    (*pipe_reg)->issue( active_mask, warp_id, gpu_tot_sim_cycle + gpu_sim_cycle, m_warp[warp_id].get_dynamic_warp_id() ); // dynamic instruction information
+    (*pipe_reg)->issue( active_mask, warp_id, gpu_tot_sim_cycle + gpu_sim_cycle, m_warp[warp_id].get_dynamic_warp_id(), inDPU); // dynamic instruction information
     m_stats->shader_cycle_distro[2 + (*pipe_reg)->active_count()]++;
     func_exec_inst( **pipe_reg );
     if ( next_inst->op == BARRIER_OP ) {
@@ -873,7 +873,7 @@ void scheduler_unit::cycle()
         unsigned issued = 0;
         unsigned max_issue = m_shader->m_config->gpgpu_max_insn_issue_per_warp;
         while ( !warp(warp_id).waiting() && !warp(warp_id).ibuffer_empty() && (checked < max_issue) && (checked <= issued) && (issued < max_issue) ) {
-            const warp_inst_t *pI = warp(warp_id).ibuffer_next_inst();
+            warp_inst_t *pI = (warp_inst_t*) warp(warp_id).ibuffer_next_inst();
             //Jin: handle cdp latency;
             if (pI && pI->m_is_cdp && warp(warp_id).m_cdp_latency > 0) {
                 assert(warp(warp_id).m_cdp_dummy);
@@ -888,6 +888,10 @@ void scheduler_unit::cycle()
             SCHED_DPRINTF( "Warp (warp_id %u, dynamic_warp_id %u) has valid instruction (%s)\n",
                            (*iter)->get_warp_id(), (*iter)->get_dynamic_warp_id(),
                            ptx_get_insn_str( pc).c_str() );
+            if (gpu_sim_cycle + gpu_tot_sim_cycle == 2279 && (*iter)->get_warp_id()==6){
+                int sdf;
+                sdf++;
+            }
             if ( pI ) {
                 assert(valid);
                 if ( pc != pI->pc ) {
@@ -936,12 +940,14 @@ void scheduler_unit::cycle()
                                 }
 
                                 // always prefer DP pipe for operations that can use both DP and SFU pipelines
-                                m_shader->issue_warp(*m_dp_out, pI, active_mask, warp_id);
+                                pI->latency = pI->latency_dpu;
+                                pI->initiation_interval = pI->initiation_interval_dpu;
+                                m_shader->issue_warp(*m_dp_out, pI, active_mask, warp_id, true);
                                 issued++;
                                 issued_inst = true;
                                 warp_inst_issued = true;
 
-                            } else if ( sp_pipe_avail && (pI->op != SFU_OP) ) {
+                            } else if ( sp_pipe_avail && (pI->op != SFU_OP)) {
 
                                 //Jin: special for CDP api
                                 if (pI->m_is_cdp && !warp(warp_id).m_cdp_dummy) {
@@ -1266,6 +1272,11 @@ void shader_core_ctx::execute()
         if ( issue_inst.has_ready() && m_fu[n]->can_issue( **ready_reg ) ) {
             bool schedule_wb_now = !m_fu[n]->stallable();
             int resbus = -1;
+            // if(n==2 && ( schedule_wb_now && (resbus = test_res_bus( (*ready_reg)->latency_dpu)) != -1 )){
+            //     assert( (*ready_reg)->latency_dpu < MAX_ALU_LATENCY );
+            //     m_result_bus[resbus]->set( (*ready_reg)->latency_dpu );
+            //     m_fu[n]->issue( issue_inst );
+            // }
             if ( schedule_wb_now && (resbus = test_res_bus( (*ready_reg)->latency )) != -1 ) {
                 assert( (*ready_reg)->latency < MAX_ALU_LATENCY );
                 m_result_bus[resbus]->set( (*ready_reg)->latency );
@@ -1578,6 +1589,7 @@ void sfu::issue( register_set& source_reg )
     pipelined_simd_unit::issue(source_reg);
 }
 
+
 void ldst_unit::active_lanes_in_pipeline() {
     unsigned active_count = pipelined_simd_unit::get_active_lanes_in_pipeline();
     assert(active_count <= m_core->get_config()->warp_size);
@@ -1630,13 +1642,31 @@ dp_unit::dp_unit( register_set* result_port, const shader_core_config *config, s
     m_name = "DP ";
 }
 
-void dp_unit :: issue(register_set& source_reg)
+void dp_unit::issue(register_set& source_reg)
 {
     warp_inst_t** ready_reg = source_reg.get_ready();
     //m_core->incexecstat((*ready_reg));
     (*ready_reg)->op_pipe = DP__OP;
-    m_core->incdp_stat(m_core->get_config()->warp_size, (*ready_reg)->latency);
-    pipelined_simd_unit::issue(source_reg);
+    m_core->incdp_stat(m_core->get_config()->warp_size, (*ready_reg)->latency_dpu);
+    source_reg.move_out_to(m_dispatch_reg); 
+    occupied.set(m_dispatch_reg->latency_dpu);
+    // pipelined_simd_unit::issue(source_reg);
+}
+
+void dp_unit::cycle()
+{
+    if ( !m_pipeline_reg[0]->empty() ) {
+        m_result_port->move_in(m_pipeline_reg[0]);
+    }
+    for ( unsigned stage = 0; (stage + 1) < m_pipeline_depth; stage++ )
+        move_warp(m_pipeline_reg[stage], m_pipeline_reg[stage + 1]);
+    if ( !m_dispatch_reg->empty() ) {
+        if ( !m_dispatch_reg->dispatch_delay()) {
+            int start_stage = m_dispatch_reg->latency_dpu - m_dispatch_reg->initiation_interval_dpu;
+            move_warp(m_pipeline_reg[start_stage], m_dispatch_reg);
+        }
+    }
+    occupied >>= 1;
 }
 
 

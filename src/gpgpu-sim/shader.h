@@ -1100,10 +1100,13 @@ public:
         case MEMORY_BARRIER_OP: return false;
         default: break;
         }
-        return pipelined_simd_unit::can_issue(inst);
+        return (m_dispatch_reg->empty() && !occupied.test(inst.latency_dpu));
+        // return pipelined_simd_unit::can_issue(inst);
     }
     virtual void active_lanes_in_pipeline();
     virtual void issue( register_set& source_reg );
+    void cycle();
+
 };
 
 class simt_core_cluster;
@@ -1287,7 +1290,7 @@ struct shader_core_config : public core_config
         assert( !(n_thread_per_shader % warp_size) );
         max_sfu_latency = 512;
         max_sp_latency = 32;
-        max_dp_latency = 64;
+        max_dp_latency = 39;
         m_L1I_config.init(m_L1I_config.m_config_string,FuncCachePreferNone);
         m_L1T_config.init(m_L1T_config.m_config_string,FuncCachePreferNone);
         m_L1C_config.init(m_L1C_config.m_config_string,FuncCachePreferNone);
@@ -1819,7 +1822,7 @@ public:
     friend class scheduler_unit; //this is needed to use private issue warp.
     friend class TwoLevelScheduler;
     friend class LooseRoundRobbinScheduler;
-    void issue_warp( register_set& warp, const warp_inst_t *pI, const active_mask_t &active_mask, unsigned warp_id );
+    void issue_warp( register_set& warp, const warp_inst_t *pI, const active_mask_t &active_mask, unsigned warp_id, bool inDPU=false);
     void func_exec_inst( warp_inst_t &inst );
 
      // Returns numbers of addresses in translated_addrs

@@ -62,8 +62,8 @@ addr_t g_debug_pc = 0xBEEF1518;
 unsigned g_ptx_sim_num_insn = 0;
 unsigned gpgpu_param_num_shaders = 0;
 
-char *opcode_latency_int, *opcode_latency_fp, *opcode_latency_dp;
-char *opcode_initiation_int, *opcode_initiation_fp, *opcode_initiation_dp;
+char *opcode_latency_int, *opcode_latency_fp, *opcode_latency_dp, *opcode_latency_dp_dpu;
+char *opcode_initiation_int, *opcode_initiation_fp, *opcode_initiation_dp, *opcode_initiation_dp_dpu;
 char *cdp_latency_str;
 unsigned cdp_latency[5];
 
@@ -80,6 +80,10 @@ void ptx_opcocde_latency_options (option_parser_t opp) {
                            "Opcode latencies for double precision floating points <ADD,MAX,MUL,MAD,DIV>"
                            "Default 8,8,8,8,335",
                            "8,8,8,8,335");
+    option_parser_register(opp, "-ptx_opcode_latency_dp_dpu", OPT_CSTR, &opcode_latency_dp_dpu,
+                           "Opcode latencies for double precision floating points <ADD,MAX,MUL,MAD,DIV> run on the DPUs"
+                           "Default 1,1,1,1,30",
+                           "1,1,1,1,30");
     option_parser_register(opp, "-ptx_opcode_initiation_int", OPT_CSTR, &opcode_initiation_int,
                            "Opcode initiation intervals for integers <ADD,MAX,MUL,MAD,DIV>"
                            "Default 1,1,4,4,32",
@@ -92,6 +96,10 @@ void ptx_opcocde_latency_options (option_parser_t opp) {
                            "Opcode initiation intervals for double precision floating points <ADD,MAX,MUL,MAD,DIV>"
                            "Default 8,8,8,8,130",
                            "8,8,8,8,130");
+    option_parser_register(opp, "-ptx_opcode_initiation_dp_dpu", OPT_CSTR, &opcode_initiation_dp_dpu,
+                           "Opcode initiation intervals for double precision floating points <ADD,MAX,MUL,MAD,DIV>"
+                           "Default 1,1,1,1,5",
+                           "1,1,1,1,5");
     option_parser_register(opp, "-cdp_latency", OPT_CSTR, &cdp_latency_str,
                            "CDP API latency <cudaStreamCreateWithFlags, \
 cudaGetParameterBufferV2_init_perWarp, cudaGetParameterBufferV2_perKernel, \
@@ -596,6 +604,10 @@ void ptx_instruction::set_opcode_and_latency()
     unsigned int_init[5];
     unsigned fp_init[5];
     unsigned dp_init[5];
+
+    unsigned dp_dpu_init[5];
+    unsigned dp_dpu_latency[5];
+
     /*
      * [0] ADD,SUB
      * [1] MAX,Min
@@ -624,7 +636,15 @@ void ptx_instruction::set_opcode_and_latency()
     sscanf(cdp_latency_str, "%u,%u,%u,%u,%u",
            &cdp_latency[0], &cdp_latency[1], &cdp_latency[2],
            &cdp_latency[3], &cdp_latency[4]);
-
+    
+    sscanf(opcode_initiation_dp_dpu, "%u,%u,%u,%u,%u",
+           &dp_dpu_init[0], &dp_dpu_init[1], &dp_dpu_init[2],
+           &dp_dpu_init[3], &dp_dpu_init[4]);
+    
+    sscanf(opcode_latency_dp_dpu, "%u,%u,%u,%u,%u",
+           &dp_dpu_latency[0], &dp_dpu_latency[1], &dp_dpu_latency[2],
+           &dp_dpu_latency[3], &dp_dpu_latency[4]);
+    
     if (!m_operands.empty()) {
         std::vector<operand_info>::iterator it;
         for (it = ++m_operands.begin(); it != m_operands.end(); it++) {
@@ -637,6 +657,9 @@ void ptx_instruction::set_opcode_and_latency()
     op = ALU_OP;
     mem_op = NOT_TEX;
     initiation_interval = latency = 1;
+
+    initiation_interval_dpu = latency_dpu = 1;
+
     switch ( m_opcode ) {
     case MOV_OP:
         assert( !(has_memory_read() && has_memory_write()) );
@@ -682,6 +705,8 @@ void ptx_instruction::set_opcode_and_latency()
         case FF64_TYPE:
             latency = dp_latency[0];
             initiation_interval = dp_init[0];
+            latency_dpu = dp_dpu_latency[0];
+            initiation_interval_dpu = dp_dpu_init[0];
             break;
         case B32_TYPE:
         case U32_TYPE:
@@ -703,6 +728,8 @@ void ptx_instruction::set_opcode_and_latency()
         case FF64_TYPE:
             latency = dp_latency[1];
             initiation_interval = dp_init[1];
+            latency_dpu = dp_dpu_latency[1];
+            initiation_interval_dpu = dp_dpu_init[1];
             break;
         case B32_TYPE:
         case U32_TYPE:
@@ -725,6 +752,8 @@ void ptx_instruction::set_opcode_and_latency()
         case FF64_TYPE:
             latency = dp_latency[2];
             initiation_interval = dp_init[2];
+            latency_dpu = dp_dpu_latency[2];
+            initiation_interval_dpu = dp_dpu_init[2];
             op = ALU_SFU_OP;
             break;
         case B32_TYPE:
@@ -748,6 +777,8 @@ void ptx_instruction::set_opcode_and_latency()
         case FF64_TYPE:
             latency = dp_latency[3];
             initiation_interval = dp_init[3];
+            latency_dpu = dp_dpu_latency[3];
+            initiation_interval_dpu = dp_dpu_init[3];
             break;
         case B32_TYPE:
         case U32_TYPE:
@@ -771,6 +802,8 @@ void ptx_instruction::set_opcode_and_latency()
         case FF64_TYPE:
             latency = dp_latency[4];
             initiation_interval = dp_init[4];
+            latency_dpu = dp_dpu_latency[4];
+            initiation_interval_dpu = dp_dpu_init[4];
             break;
         case B32_TYPE:
         case U32_TYPE:

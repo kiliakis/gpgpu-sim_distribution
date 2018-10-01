@@ -114,15 +114,27 @@ Add DPU support to GPGPU-Sim
         * If DPUs:
             * All double precision goes to the DPUs (with 
             latency/bandwidth equal to the single precision)
+            * BUT if a double precision unit is not available, the instruction 
+            goes to the SP units (with high latency)
             * All single precision goes to the SPUs
         * This means that effectively, the bandwidth of double precision/ 
         single is equal to DPUs/SPUs.
         * To do that, I need:
-            * Two latencies for dp operations, 1 if run on SP and 1 if run on DP.
-            * Let's call them latency and latency_dpu
-            * By default the dpu_dp will be equal to the spu_fp.
-            * Two implementations of the pipelined_simd_unit::cycle()
-                * If it is a DPU, it uses the latency_dpu (and initiation_interval_dpu)
+            * Two latencies for dp operations, 1 if run on SP and 1 if          done
+            run on DP.
+            * Let's call them latency and latency_dpu                           done
+            * By default the dpu_dp will be equal to the spu_fp.                not done (manual)
+            * Two implementations of the pipelined_simd_unit::cycle()           done (needs validation)
+                * If it is a DPU, it uses the latency_dpu 
+                (and initiation_interval_dpu)
+        * in warp_inst_t.cycles = initiation_interval in the issue function     done
+            * Is this ok? where is it used?
+            * Maybe add another option to specify whether it is a dp operation  done
+            on a dpu?
+            * issue_warp in shader.cc calls warp_isnt_t::issue()
+            * scheduler->cycle() calls the issue_warp. So we pass something to  done
+            issue_warp to signify that we have a dpu executing.
+        * added the dp_unit::cycle implementation, need to check that is called
 
 5) Useful notes:
     * a warp_inst_t derives from inst_t
