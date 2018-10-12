@@ -149,10 +149,10 @@ void power_core_stat_t::print (FILE *fout)
     for(unsigned i=0; i<m_config->num_shader();i++){
         fprintf(fout,"core %u:\n",i);
         fprintf(fout,"\tpipeline duty cycle =%f\n",m_pipeline_duty_cycle[CURRENT_STAT_IDX][i]);
-        fprintf(fout,"\tTotal Deocded Instructions=%u\n",m_num_decoded_insn[CURRENT_STAT_IDX][i]);
-        fprintf(fout,"\tTotal FP Deocded Instructions=%u\n",m_num_FPdecoded_insn[CURRENT_STAT_IDX][i]);
-        fprintf(fout,"\tTotal FP64 Deocded Instructions=%u\n",m_num_FP64decoded_insn[CURRENT_STAT_IDX][i]);
-        fprintf(fout,"\tTotal INT Deocded Instructions=%u\n",m_num_INTdecoded_insn[CURRENT_STAT_IDX][i]);
+        fprintf(fout,"\tTotal Decoded Instructions=%u\n",m_num_decoded_insn[CURRENT_STAT_IDX][i]);
+        fprintf(fout,"\tTotal FP Decoded Instructions=%u\n",m_num_FPdecoded_insn[CURRENT_STAT_IDX][i]);
+        fprintf(fout,"\tTotal FP64 Decoded Instructions=%u\n",m_num_FP64decoded_insn[CURRENT_STAT_IDX][i]);
+        fprintf(fout,"\tTotal INT Decoded Instructions=%u\n",m_num_INTdecoded_insn[CURRENT_STAT_IDX][i]);
         fprintf(fout,"\tTotal LOAD Queued Instructions=%u\n",m_num_loadqueued_insn[CURRENT_STAT_IDX][i]);
         fprintf(fout,"\tTotal STORE Queued Instructions=%u\n",m_num_storequeued_insn[CURRENT_STAT_IDX][i]);
         fprintf(fout,"\tTotal IALU Acesses=%u\n",m_num_ialu_acesses[CURRENT_STAT_IDX][i]);

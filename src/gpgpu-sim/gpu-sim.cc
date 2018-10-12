@@ -1014,6 +1014,8 @@ void gpgpu_sim::gpu_print_stat()
     printf("L2_BW  = %12.4f GB/Sec\n", ((float)(partiton_replys_in_parallel * 32) / (gpu_sim_cycle * m_config.icnt_period)) / 1000000000);
     printf("L2_BW_total  = %12.4f GB/Sec\n", ((float)((partiton_replys_in_parallel + partiton_replys_in_parallel_total) * 32) / ((gpu_tot_sim_cycle + gpu_sim_cycle) * m_config.icnt_period)) / 1000000000 );
 
+    m_power_stats->print(statfout);
+
     time_t curr_time;
     time(&curr_time);
     unsigned long long elapsed_time = MAX( curr_time - g_simulation_starttime, 1 );
