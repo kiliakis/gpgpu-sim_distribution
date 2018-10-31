@@ -484,6 +484,15 @@ void shader_core_stats::print( FILE* fout ) const
     fprintf(fout, "gpu_reg_bank_conflict_stalls = %d\n", gpu_reg_bank_conflict_stalls);
 
     fprintf(fout, "Warp Occupancy Distribution:\n");
+    float occupancy = 0;
+    for (unsigned i = 1; i < m_config->warp_size + 1; i++)
+        occupancy += i * shader_cycle_distro[i + 2];
+    occupancy /= thread_icount_uarch;
+    fprintf(fout, "W_Occupancy:%.2f\t", occupancy);
+    occupancy = thread_icount_uarch * occupancy /
+                (thread_icount_uarch + shader_cycle_distro[0] +
+                 shader_cycle_distro[1] + shader_cycle_distro[2]);
+    fprintf(fout, "Utilization:%.2f\t", occupancy);
     fprintf(fout, "Stall:%d\t", shader_cycle_distro[2]);
     fprintf(fout, "W0_Idle:%d\t", shader_cycle_distro[0]);
     fprintf(fout, "W0_Scoreboard:%d", shader_cycle_distro[1]);
@@ -888,7 +897,7 @@ void scheduler_unit::cycle()
             SCHED_DPRINTF( "Warp (warp_id %u, dynamic_warp_id %u) has valid instruction (%s)\n",
                            (*iter)->get_warp_id(), (*iter)->get_dynamic_warp_id(),
                            ptx_get_insn_str( pc).c_str() );
-            if (gpu_sim_cycle + gpu_tot_sim_cycle == 2279 && (*iter)->get_warp_id()==6){
+            if (gpu_sim_cycle + gpu_tot_sim_cycle == 2279 && (*iter)->get_warp_id() == 6) {
                 int sdf;
                 sdf++;
             }
@@ -1272,7 +1281,7 @@ void shader_core_ctx::execute()
         if ( issue_inst.has_ready() && m_fu[n]->can_issue( **ready_reg ) ) {
             bool schedule_wb_now = !m_fu[n]->stallable();
             int resbus = -1;
-            
+
             if ( schedule_wb_now && (resbus = test_res_bus( (*ready_reg)->latency )) != -1 ) {
                 assert( (*ready_reg)->latency < MAX_ALU_LATENCY );
                 m_result_bus[resbus]->set( (*ready_reg)->latency );
